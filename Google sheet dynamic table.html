@@ -219,8 +219,51 @@ function buildColumnsFromKeys(keys){
   return keys.map(k => ({ key:k, label:k, width:"auto", hidden:false, isLink:false }));
 }
 
-function looksLikeUrl(v){
-  return typeof v === "string" && /^https?:\/\/\S+$/i.test(v.trim());
+// Finds the first http(s) URL anywhere inside a string (not just when the
+// whole cell is one bare URL), and trims trailing punctuation that's
+// likely not part of the link itself (., ,, ;, ), ]).
+function findUrl(str){
+  const m = String(str).match(/https?:\/\/[^\s<>"]+/i);
+  if (!m) return null;
+  let url = m[0];
+  const trailing = url.match(/[.,;:)\]]+$/);
+  if (trailing) url = url.slice(0, -trailing[0].length);
+  return { url, index: m.index };
+}
+
+// Renders `val` into `container`, turning any URL it contains into a real,
+// directly-clickable <a> — the rest of the text (if any) stays as plain
+// text. If `forceLink` is true (column marked isLink) and no http(s) URL
+// is found, the whole value is still used as the href as a fallback.
+function renderLinkedText(container, val, forceLink){
+  const str = String(val ?? "");
+  const found = findUrl(str);
+
+  if (!found && !forceLink) {
+    container.textContent = str;
+    return;
+  }
+
+  const makeLink = (href, label) => {
+    const a = document.createElement("a");
+    a.href = href; a.textContent = label; a.target = "_blank";
+    a.rel = "noopener noreferrer"; a.className = "dt-link";
+    a.addEventListener("click", e => e.stopPropagation());
+    return a;
+  };
+
+  if (!found) {
+    // forceLink is true but the value itself doesn't look like a URL —
+    // still link the whole value (e.g. a relative path).
+    container.appendChild(makeLink(str, str));
+    return;
+  }
+
+  const before = str.slice(0, found.index);
+  const after = str.slice(found.index + found.url.length);
+  if (before) container.appendChild(document.createTextNode(before));
+  container.appendChild(makeLink(found.url, found.url));
+  if (after) container.appendChild(document.createTextNode(after));
 }
 
 function fetchSheet(){
@@ -285,17 +328,10 @@ function render(){
     visibleCols.forEach(c => {
       const td = document.createElement("td");
       const val = row[c.key] ?? "";
-      if (c.isLink || looksLikeUrl(val)) {
-        // Render as a live, directly-clickable link inside the cell itself —
-        // stopPropagation keeps this click from also opening the row's detail modal.
-        const a = document.createElement("a");
-        a.href = val; a.textContent = val; a.target = "_blank";
-        a.rel = "noopener noreferrer"; a.className = "dt-link";
-        a.addEventListener("click", e => e.stopPropagation());
-        td.appendChild(a);
-      } else {
-        td.textContent = val;
-      }
+      // Render as live, directly-clickable link(s) inside the cell itself —
+      // stopPropagation (inside renderLinkedText) keeps that click from also
+      // opening the row's detail modal.
+      renderLinkedText(td, val, c.isLink);
       tr.appendChild(td);
     });
     tr.addEventListener("click", () => openModal(row));
@@ -329,14 +365,7 @@ function openModal(row){
     label.textContent = c.label;
     const value = document.createElement("div");
     value.className = "dt-field-value";
-    if (c.isLink || looksLikeUrl(val)) {
-      const a = document.createElement("a");
-      a.href = val; a.textContent = val; a.target = "_blank";
-      a.rel = "noopener noreferrer"; a.className = "dt-link";
-      value.appendChild(a);
-    } else {
-      value.textContent = val;
-    }
+    renderLinkedText(value, val, c.isLink);
     field.appendChild(label);
     field.appendChild(value);
     bodyEl.appendChild(field);
