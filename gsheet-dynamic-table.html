@@ -216,7 +216,7 @@ let columns = [];
 
 function buildColumnsFromKeys(keys){
   if (CONFIG.COLUMNS.length) return CONFIG.COLUMNS;
-  return keys.map(k => ({ key:k, label:k, width:"auto", hidden:false, isLink:false }));
+  return keys.map(k => ({ key:k, label:k, width:"auto", hidden:false, isLink:true }));
 }
 
 // Finds the first http(s) URL anywhere inside a string (not just when the
