@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamic Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     CONFIGURATION — edit the section below to fit your needs
+     ============================================================ */
+  :root{
+    --accent: #2563a8;       /* main accent color (header, links, modal) */
+    --surface: #ffffff;      /* table background color */
+    --border: #e3e2df;       /* divider line color */
+    --text: #1c1c1a;
+    --text-muted: #6f6e6a;
+    --row-hover: #f6f7f9;
+    --radius: 6px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:transparent; }
+  body{
+    font-family:var(--font);
+    color:var(--text);
+    font-size:14px;
+    line-height:1.45;
+  }
+
+  .dt-wrap{ max-width:100%; }
+
+  .dt-toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  .dt-search{
+    flex:1;
+    max-width:280px;
+    border:none;
+    border-bottom:1.5px solid var(--border);
+    background:transparent;
+    padding:6px 2px;
+    font-family:var(--font);
+    font-size:14px;
+    color:var(--text);
+    outline:none;
+    transition:border-color .15s ease;
+  }
+  .dt-search:focus{ border-bottom-color:var(--accent); }
+  .dt-count{ color:var(--text-muted); font-size:12.5px; white-space:nowrap; }
+
+  .dt-scroll{
+    overflow-x:auto;
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+  }
+  table.dt-table{
+    width:100%;
+    border-collapse:collapse;
+    background:var(--surface);
+  }
+  .dt-table thead th{
+    text-align:left;
+    font-weight:600;
+    font-size:13px;
+    color:var(--text);
+    padding:10px 14px;
+    border-bottom:2px solid var(--accent);
+    white-space:nowrap;
+    position:sticky;
+    top:0;
+    background:var(--surface);
+  }
+  .dt-table tbody td{
+    padding:10px 14px;
+    border-bottom:1px solid var(--border);
+    vertical-align:top;
+  }
+  .dt-table tbody tr{ cursor:pointer; transition:background .1s ease; }
+  .dt-table tbody tr:hover{ background:var(--row-hover); }
+  .dt-table tbody tr:last-child td{ border-bottom:none; }
+
+  .dt-link{ color:var(--accent); text-decoration:none; border-bottom:1px solid transparent; }
+  .dt-link:hover{ border-bottom-color:var(--accent); }
+
+  .dt-empty, .dt-loading, .dt-error{
+    padding:32px 14px;
+    text-align:center;
+    color:var(--text-muted);
+  }
+  .dt-error{ color:#b3372c; }
+
+  .dt-demo-note{
+    margin-top:10px;
+    font-size:12px;
+    color:var(--text-muted);
+    padding:8px 12px;
+    border-left:3px solid var(--accent);
+    background:var(--row-hover);
+  }
+
+  /* row detail modal */
+  .dt-modal-backdrop{
+    position:fixed; inset:0;
+    background:rgba(20,20,18,.45);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
+    padding:20px;
+  }
+  .dt-modal-backdrop.open{ display:flex; }
+  .dt-modal{
+    background:var(--surface);
+    border-radius:var(--radius);
+    max-width:480px;
+    width:100%;
+    max-height:80vh;
+    overflow-y:auto;
+    box-shadow:0 12px 40px rgba(0,0,0,.18);
+  }
+  .dt-modal-head{
+    padding:16px 20px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    position:sticky; top:0;
+    background:var(--surface);
+  }
+  .dt-modal-head h3{ margin:0; font-size:16px; font-weight:600; }
+  .dt-modal-close{
+    border:none; background:none; cursor:pointer;
+    font-size:20px; line-height:1; color:var(--text-muted);
+    padding:4px;
+  }
+  .dt-modal-close:hover{ color:var(--text); }
+  .dt-modal-body{ padding:16px 20px; }
+  .dt-field{ padding:8px 0; border-bottom:1px solid var(--border); }
+  .dt-field:last-child{ border-bottom:none; }
+  .dt-field-label{ font-size:12px; color:var(--text-muted); margin-bottom:2px; }
+  .dt-field-value{ font-size:14px; }
+</style>
+</head>
+<body>
+
+<div class="dt-wrap">
+  <div class="dt-toolbar">
+    <input class="dt-search" type="text" placeholder="Search..." id="dtSearch">
+    <span class="dt-count" id="dtCount"></span>
+  </div>
+  <div class="dt-scroll">
+    <table class="dt-table" id="dtTable" style="display:none">
+      <thead><tr id="dtHeadRow"></tr></thead>
+      <tbody id="dtBody"></tbody>
+    </table>
+    <div class="dt-loading" id="dtLoading">Loading data...</div>
+    <div class="dt-error" id="dtError" style="display:none"></div>
+  </div>
+  <div class="dt-demo-note" id="dtDemoNote" style="display:none">
+    This is sample data. Replace <code>SHEET_ID</code> in the configuration (inside the code) with your own Google Sheet ID to show real data.
+  </div>
+</div>
+
+<div class="dt-modal-backdrop" id="dtModalBackdrop">
+  <div class="dt-modal">
+    <div class="dt-modal-head">
+      <h3 id="dtModalTitle">Details</h3>
+      <button class="dt-modal-close" id="dtModalClose">&times;</button>
+    </div>
+    <div class="dt-modal-body" id="dtModalBody"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   MAIN CONFIGURATION
+   ============================================================ */
+const CONFIG = {
+  // Get this from the Sheet URL: docs.google.com/spreadsheets/d/**SHEET_ID**/edit
+  SHEET_ID: "1BRPKQhgxTx3BzrWpZC4Lwlx_T_K1Hk2916BG_ViTQK4",
+
+  // Sheet/tab name (leave "" to use the first tab)
+  SHEET_NAME: "",
+
+  // Configure columns manually (optional). Leave this array empty ([])
+  // to automatically use all columns & headers from the sheet.
+  // key must match the header text in the sheet's first row exactly.
+  COLUMNS: [
+    // { key: "Name", label: "Name", width: "200px", hidden: false, isLink: false },
+    // { key: "Link", label: "Link", width: "120px", hidden: false, isLink: true },
+    // { key: "Notes", label: "Notes", width: "auto", hidden: true }, // hidden = not shown in the table, but still shown in the detail modal
+  ],
+};
+
+/* ============================================================
+   SAMPLE DATA — used when SHEET_ID is not set or the fetch fails
+   ============================================================ */
+const DEMO_ROWS = [
+  { Name: "Evaluation Program A", Region: "Southeast Asia", Status: "Ongoing", Link: "https://example.com/a" },
+  { Name: "Evaluation Program B", Region: "South Asia", Status: "Completed", Link: "https://example.com/b" },
+  { Name: "Evaluation Program C", Region: "Pacific", Status: "Planning", Link: "https://example.com/c" },
+];
+
+/* ============================================================
+   LOGIC — usually no need to change anything below this line
+   ============================================================ */
+let allRows = [];
+let columns = [];
+
+function buildColumnsFromKeys(keys){
+  if (CONFIG.COLUMNS.length) return CONFIG.COLUMNS;
+  return keys.map(k => ({ key:k, label:k, width:"auto", hidden:false, isLink:false }));
+}
+
+// Finds the first http(s) URL anywhere inside a string (not just when the
+// whole cell is one bare URL), and trims trailing punctuation that's
+// likely not part of the link itself (., ,, ;, ), ]).
+function findUrl(str){
+  const m = String(str).match(/https?:\/\/[^\s<>"]+/i);
+  if (!m) return null;
+  let url = m[0];
+  const trailing = url.match(/[.,;:)\]]+$/);
+  if (trailing) url = url.slice(0, -trailing[0].length);
+  return { url, index: m.index };
+}
+
+// Renders `val` into `container`, turning any URL it contains into a real,
+// directly-clickable <a> — the rest of the text (if any) stays as plain
+// text. If `forceLink` is true (column marked isLink) and no http(s) URL
+// is found, the whole value is still used as the href as a fallback.
+function renderLinkedText(container, val, forceLink){
+  const str = String(val ?? "");
+  const found = findUrl(str);
+
+  if (!found && !forceLink) {
+    container.textContent = str;
+    return;
+  }
+
+  const makeLink = (href, label) => {
+    const a = document.createElement("a");
+    a.href = href; a.textContent = label; a.target = "_blank";
+    a.rel = "noopener noreferrer"; a.className = "dt-link";
+    a.addEventListener("click", e => e.stopPropagation());
+    return a;
+  };
+
+  if (!found) {
+    // forceLink is true but the value itself doesn't look like a URL —
+    // still link the whole value (e.g. a relative path).
+    container.appendChild(makeLink(str, str));
+    return;
+  }
+
+  const before = str.slice(0, found.index);
+  const after = str.slice(found.index + found.url.length);
+  if (before) container.appendChild(document.createTextNode(before));
+  container.appendChild(makeLink(found.url, found.url));
+  if (after) container.appendChild(document.createTextNode(after));
+}
+
+function fetchSheet(){
+  return new Promise((resolve, reject) => {
+    if (!CONFIG.SHEET_ID || CONFIG.SHEET_ID === "YOUR_SHEET_ID_HERE") {
+      reject(new Error("no-sheet-id"));
+      return;
+    }
+    const sheetParam = CONFIG.SHEET_NAME ? `&sheet=${encodeURIComponent(CONFIG.SHEET_NAME)}` : "";
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json${sheetParam}`;
+
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error("fetch-failed");
+        return res.text();
+      })
+      .then(text => {
+        // The gviz endpoint wraps its JSON in
+        // google.visualization.Query.setResponse(...);
+        // Extract the payload with regex instead of eval().
+        const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?\s*$/);
+        if (!match) throw new Error("parse-failed");
+        const json = JSON.parse(match[1]);
+        if (json.status === "error") throw new Error("sheet-error");
+
+        const cols = json.table.cols.map(c => c.label || c.id);
+        const rows = json.table.rows.map(r => {
+          const obj = {};
+          cols.forEach((label, i) => {
+            const cell = r.c[i];
+            obj[label] = cell ? (cell.f !== undefined && cell.f !== null ? cell.f : cell.v) : "";
+          });
+          return obj;
+        });
+        resolve({ cols, rows });
+      })
+      .catch(reject);
+  });
+}
+
+function render(){
+  const headRow = document.getElementById("dtHeadRow");
+  const body = document.getElementById("dtBody");
+  headRow.innerHTML = "";
+  body.innerHTML = "";
+
+  const visibleCols = columns.filter(c => !c.hidden);
+  visibleCols.forEach(c => {
+    const th = document.createElement("th");
+    th.textContent = c.label;
+    if (c.width && c.width !== "auto") th.style.width = c.width;
+    headRow.appendChild(th);
+  });
+
+  const query = document.getElementById("dtSearch").value.trim().toLowerCase();
+  const filtered = !query ? allRows : allRows.filter(row =>
+    visibleCols.some(c => String(row[c.key] ?? "").toLowerCase().includes(query))
+  );
+
+  filtered.forEach(row => {
+    const tr = document.createElement("tr");
+    visibleCols.forEach(c => {
+      const td = document.createElement("td");
+      const val = row[c.key] ?? "";
+      // Render as live, directly-clickable link(s) inside the cell itself —
+      // stopPropagation (inside renderLinkedText) keeps that click from also
+      // opening the row's detail modal.
+      renderLinkedText(td, val, c.isLink);
+      tr.appendChild(td);
+    });
+    tr.addEventListener("click", () => openModal(row));
+    body.appendChild(tr);
+  });
+
+  document.getElementById("dtCount").textContent = `${filtered.length} rows`;
+  document.getElementById("dtTable").style.display = filtered.length ? "table" : "none";
+  document.getElementById("dtLoading").style.display = "none";
+  if (!filtered.length) {
+    document.getElementById("dtError").style.display = "block";
+    document.getElementById("dtError").textContent = query ? "No matching results." : "No data yet.";
+  } else {
+    document.getElementById("dtError").style.display = "none";
+  }
+}
+
+function openModal(row){
+  const backdrop = document.getElementById("dtModalBackdrop");
+  const titleField = columns[0] ? columns[0].key : null;
+  document.getElementById("dtModalTitle").textContent = titleField ? String(row[titleField] ?? "Details") : "Details";
+
+  const bodyEl = document.getElementById("dtModalBody");
+  bodyEl.innerHTML = "";
+  columns.forEach(c => {
+    const val = row[c.key] ?? "";
+    const field = document.createElement("div");
+    field.className = "dt-field";
+    const label = document.createElement("div");
+    label.className = "dt-field-label";
+    label.textContent = c.label;
+    const value = document.createElement("div");
+    value.className = "dt-field-value";
+    renderLinkedText(value, val, c.isLink);
+    field.appendChild(label);
+    field.appendChild(value);
+    bodyEl.appendChild(field);
+  });
+
+  backdrop.classList.add("open");
+}
+
+document.getElementById("dtModalClose").addEventListener("click", () => {
+  document.getElementById("dtModalBackdrop").classList.remove("open");
+});
+document.getElementById("dtModalBackdrop").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
+});
+document.getElementById("dtSearch").addEventListener("input", render);
+
+fetchSheet()
+  .then(({ cols, rows }) => {
+    columns = buildColumnsFromKeys(cols);
+    allRows = rows;
+    render();
+  })
+  .catch(() => {
+    // fallback to sample data
+    const keys = Object.keys(DEMO_ROWS[0]);
+    columns = buildColumnsFromKeys(keys);
+    allRows = DEMO_ROWS;
+    document.getElementById("dtDemoNote").style.display = "block";
+    render();
+  });
+</script>
+</body>
+</html>
